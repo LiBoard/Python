@@ -15,7 +15,7 @@ from typing import Callable, Optional
 # TODO documentation
 
 class LiBoard:
-    MOVE_DELAY = 25 * (10 ** 6)  # in ns
+    MOVE_DELAY = 0  # in ns
     STARTING_POSITION = Bits(hex="C3C3C3C3C3C3C3C3")
 
     def __init__(self, port="/dev/ttyACM0", baud_rate=9600):
