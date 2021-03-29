@@ -16,9 +16,9 @@ from typing import Callable, Optional
 
 class LiBoard:
     MOVE_DELAY = 0  # in ns
-    STARTING_POSITION = Bits(hex="C3C3C3C3C3C3C3C3")
+    STARTING_POSITION = Bits(hex='C3C3C3C3C3C3C3C3')
 
-    def __init__(self, port="/dev/ttyACM0", baud_rate=9600):
+    def __init__(self, port='/dev/ttyACM0', baud_rate=9600):
         self._serial = Serial(port, baudrate=baud_rate)
         self.chessboard: chess.Board = chess.Board()
 
@@ -47,7 +47,7 @@ class LiBoard:
         # The bits in the incoming data have a different order than the squares in python-chess,
         # making this conversion loop necessary
         # TODO change arduino bit order to python-chess square order
-        for arduino_index in set(bits.findall("0b1")):
+        for arduino_index in set(bits.findall('0b1')):
             file = 7 - int(arduino_index / 8)
             rank = 7 - (arduino_index % 8)
             occupied_squares.add((rank * 8) + file)

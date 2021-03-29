@@ -21,14 +21,14 @@ def main(stdscreen: curses.window):
     board = LiBoard()
     global game, node
     game = chess.pgn.Game()
-    game.headers["Date"] = datetime.datetime.now().strftime("%Y.%m.%d")
+    game.headers['Date'] = datetime.datetime.now().strftime('%Y.%m.%d')
     node = game
 
     curses.curs_set(False)
     curses.use_default_colors()
 
     stdscreen.clear()
-    stdscreen.addstr("Ready to start.")
+    stdscreen.addstr('Ready to start.')
     stdscreen.refresh()
 
     @board.start_handler
@@ -36,7 +36,7 @@ def main(stdscreen: curses.window):
         global game, node
         node = game
         stdscreen.clear()
-        stdscreen.addstr("New game.\n")
+        stdscreen.addstr('New game.\n')
         stdscreen.addstr(str(_board.chessboard))
         stdscreen.refresh()
         return False
@@ -47,8 +47,8 @@ def main(stdscreen: curses.window):
         node = node.add_main_variation(_move)
         stdscreen.clear()
         stdscreen.addstr(
-            "{num}. {ellipsis}{san}\n".format(num=int((node.ply() + 1) / 2),
-                                              ellipsis=("" if node.ply() % 2 else "..."),
+            '{num}. {ellipsis}{san}\n'.format(num=int((node.ply() + 1) / 2),
+                                              ellipsis=('' if node.ply() % 2 else '...'),
                                               san=node.san()))
         stdscreen.addstr(str(_board.chessboard))
         stdscreen.refresh()
@@ -58,7 +58,7 @@ def main(stdscreen: curses.window):
         board.update()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     exit_code = 0
     # noinspection PyBroadException
     try:
