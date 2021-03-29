@@ -31,7 +31,7 @@ def main(stdscreen: curses.window):
     stdscreen.addstr("Ready to start.")
     stdscreen.refresh()
 
-    @board.on_start
+    @board.start_handler
     def print_start_message(_board: LiBoard) -> bool:
         global game, node
         node = game
@@ -41,7 +41,7 @@ def main(stdscreen: curses.window):
         stdscreen.refresh()
         return False
 
-    @board.on_move
+    @board.move_handler
     def print_move(_board: LiBoard, _move: chess.Move) -> bool:
         global node
         node = node.add_main_variation(_move)
@@ -55,7 +55,7 @@ def main(stdscreen: curses.window):
         return False
 
     while True:
-        board.board_update()
+        board.update()
 
 
 if __name__ == "__main__":
