@@ -7,6 +7,8 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+"""Show the live position from the board using curses. Print the pgn on exit."""
+
 import curses
 import sys
 import chess
