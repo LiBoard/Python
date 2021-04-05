@@ -46,7 +46,11 @@ def main(stdscreen: curses.window):
     @board.move_handler
     def print_move(_board: LiBoard, _move: chess.Move) -> bool:
         global node
-        node = node.add_main_variation(_move)
+        if any(variation.move == _move for variation in node.variations):
+            node.promote_to_main(_move)
+            node = node.next()
+        else:
+            node = node.add_main_variation(_move)
         stdscreen.clear()
         stdscreen.addstr(
             '{num}. {ellipsis}{san}\n'.format(num=int((node.ply() + 1) / 2),
@@ -67,7 +71,8 @@ if __name__ == '__main__':
         curses.wrapper(main)
     except KeyboardInterrupt:
         pass
-    except Exception:
+    except Exception as e:
+        print(e, file=sys.stderr)
         exit_code = 1
     finally:
         print(game)
