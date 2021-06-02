@@ -19,5 +19,5 @@ setup(name='liboard',
           'Topic :: Games/Entertainment :: Board Games',
           'Topic :: Games/Entertainment :: Turn Based Strategy'
       ],
-      keywords='chess LiBoard chessboard',
+      keywords=['chess', 'LiBoard', 'chessboard'],
       install_requires=['chess', 'pyserial', 'bitstring'])
