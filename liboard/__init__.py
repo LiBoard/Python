@@ -22,7 +22,7 @@ from typing import Callable, Optional
 class LiBoard:
     """Represents a LiBoard-type electronic chessboard."""
     MOVE_DELAY = 0  # in ns
-    STARTING_POSITION = Bits(hex='C3C3C3C3C3C3C3C3')
+    STARTING_POSITION = Bits(hex='FFFF00000000FFFF')  # LERF
 
     @staticmethod
     def _is_starting_position(bits: Bits) -> bool:
@@ -41,16 +41,10 @@ class LiBoard:
         :return: A set of ints with each int corresponding to an occupied square
             (see python-chess for the mapping of ints to squares).
         """
-        occupied_squares = set()
-        # The bits in the incoming data have a different order than the squares in python-chess,
-        # making this conversion loop necessary.
-        # Order of incoming data: H8, H7, ..., A2, A1.
+        # The bits in the incoming data have a different order than the squares in python-chess.
+        # Order of incoming data: H8, G8, ..., B1, A1.
         # Order of python-chess: A1, B1, ..., G8, H8.
-        # TODO change arduino bit order to python-chess square order
-        for arduino_index in set(bits.findall('0b1')):
-            file = 7 - int(arduino_index / 8)
-            rank = 7 - (arduino_index % 8)
-            occupied_squares.add((rank * 8) + file)
+        occupied_squares = {63 - i for i in bits.findall('0b1')}
         return occupied_squares
 
     def __init__(self, port='/dev/ttyACM0', baud_rate=9600):
