@@ -33,9 +33,11 @@ def _arg_parser():
     Creates an ArgumentParser that has common args for instantiating a LiBoard.
     """
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-p', '--port', default='/dev/ttyACM0', help='The serial port which the board is connected to')
-    parser.add_argument('-b', '--baud-rate', default=9600, type=int, help='The board\'s baud rate')
-    parser.add_argument('-d', '--move-delay', default=0, type=int, help='The delay before a move is recognized')
+    parser.add_argument('-p', '--port', default='/dev/ttyACM0',
+                        help='The serial port which the board is connected to (Default /dev/ttyACM0)')
+    parser.add_argument('-b', '--baud-rate', default=9600, type=int, help='The board\'s baud rate (Default 9600)')
+    parser.add_argument('-d', '--move-delay', default=0, type=int,
+                        help='The delay before a move is recognized (Default 0)')
     return parser
 
 
