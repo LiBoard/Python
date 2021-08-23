@@ -19,12 +19,24 @@ Classes:
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import argparse
 from time import time_ns
 from typing import Callable, Optional
 
 import chess
 from bitstring import Bits
 from serial import Serial
+
+
+def _arg_parser():
+    """
+    Creates an ArgumentParser that has common args for instantiating a LiBoard.
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('-p', '--port', default='/dev/ttyACM0', help='The serial port which the board is connected to')
+    parser.add_argument('-b', '--baud-rate', default=9600, type=int, help='The board\'s baud rate')
+    parser.add_argument('-d', '--move-delay', default=0, type=int, help='The delay before a move is recognized')
+    return parser
 
 
 class LiBoard:
@@ -54,11 +66,11 @@ class LiBoard:
         occupied_squares = {63 - i for i in bits.findall('0b1')}
         return occupied_squares
 
-    def __init__(self, port='/dev/ttyACM0', baud_rate=9600, move_delay=0):
+    def __init__(self, port, baud_rate, move_delay):
         """
         Constructs and initializes a LiBoard object.
-        :param port: The serial port which the LiBoard is connected to. Default: /dev/ttyACM0.
-        :param baud_rate: The baud rate used to communicate with the board. Default: 9600.
+        :param port: The serial port which the LiBoard is connected to.
+        :param baud_rate: The baud rate used to communicate with the board.
         :param move_delay: The delay in ms before a move is recognized. Useful to enable "sliding" pieces.
         """
         self._serial = Serial(port, baudrate=baud_rate)
@@ -211,3 +223,6 @@ class LiBoard:
         return False
 
     # endregion
+
+
+ARGUMENT_PARSER = _arg_parser()
