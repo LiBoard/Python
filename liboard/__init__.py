@@ -19,7 +19,6 @@ Classes:
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 from time import time_ns
 from typing import Callable, Optional
 
@@ -30,7 +29,6 @@ from serial import Serial
 
 class LiBoard:
     """Represents a LiBoard-type electronic chessboard."""
-    MOVE_DELAY = 0  # in ns
     STARTING_POSITION = Bits(hex='FFFF00000000FFFF')  # LERF
 
     @staticmethod
@@ -56,14 +54,16 @@ class LiBoard:
         occupied_squares = {63 - i for i in bits.findall('0b1')}
         return occupied_squares
 
-    def __init__(self, port='/dev/ttyACM0', baud_rate=9600):
+    def __init__(self, port='/dev/ttyACM0', baud_rate=9600, move_delay=0):
         """
         Constructs and initializes a LiBoard object.
         :param port: The serial port which the LiBoard is connected to. Default: /dev/ttyACM0.
         :param baud_rate: The baud rate used to communicate with the board. Default: 9600.
+        :param move_delay: The delay in ms before a move is recognized. Useful to enable "sliding" pieces.
         """
         self._serial = Serial(port, baudrate=baud_rate)
         self.chessboard: chess.Board = chess.Board()
+        self._move_delay = move_delay
 
         self._start_handler: Optional[Callable[[LiBoard], bool]] = None
         self._move_handler: Optional[Callable[[LiBoard, chess.Move], bool]] = None
@@ -95,7 +95,7 @@ class LiBoard:
         """
         self._get_board_data()
         if self._physical_position_data != self._known_position_data and \
-                time_ns() >= (self._last_change + LiBoard.MOVE_DELAY) and not self._pos_checked:
+                time_ns() >= (self._last_change + self._move_delay * 1000) and not self._pos_checked:
             self._generate_move()
 
     def _get_board_data(self):
