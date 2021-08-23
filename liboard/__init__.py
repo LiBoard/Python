@@ -75,7 +75,7 @@ class LiBoard:
         """
         self._serial = Serial(port, baudrate=baud_rate)
         self.chessboard: chess.Board = chess.Board()
-        self._move_delay = move_delay
+        self._move_delay: int = move_delay
 
         self._start_handler: Optional[Callable[[LiBoard], bool]] = None
         self._move_handler: Optional[Callable[[LiBoard, chess.Move], bool]] = None
@@ -103,11 +103,11 @@ class LiBoard:
     def update(self):
         """
         Update the LiBoard by checking for new data and trying to make a
-        new move if the data hasn't changed forMOVE_DELAY nanoseconds.
+        new move if the data hasn't changed for self._move_delay nanoseconds.
         """
         self._get_board_data()
         if self._physical_position_data != self._known_position_data and \
-                time_ns() >= (self._last_change + self._move_delay * 1000) and not self._pos_checked:
+                time_ns() >= (self._last_change + self._move_delay * (10 ** 6)) and not self._pos_checked:
             self._generate_move()
 
     def _get_board_data(self):
