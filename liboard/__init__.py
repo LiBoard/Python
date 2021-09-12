@@ -64,30 +64,6 @@ _STARTING_POSITION = _PhysicalPosition(Bits(hex='FFFF00000000FFFF'))
 
 class LiBoard:
     """Represents a LiBoard-type electronic chessboard."""
-    STARTING_POSITION = Bits(hex='FFFF00000000FFFF')  # LERF
-
-    @staticmethod
-    def _is_starting_position(bits: Bits) -> bool:
-        """
-        Check if a position equals the starting position.
-        :param bits: The position to check.
-        :return: True if the position is the starting position, False otherwise.
-        """
-        return bits == LiBoard.STARTING_POSITION
-
-    @staticmethod
-    def _get_occupied_squares(bits: Bits) -> set[int]:
-        """
-        Return a set of occupied squares in a position.
-        :param bits: The position.
-        :return: A set of ints with each int corresponding to an occupied square
-            (see python-chess for the mapping of ints to squares).
-        """
-        # The bits in the incoming data have a different order than the squares in python-chess.
-        # Order of incoming data: H8, G8, ..., B1, A1.
-        # Order of python-chess: A1, B1, ..., G8, H8.
-        occupied_squares = {63 - i for i in bits.findall('0b1')}
-        return occupied_squares
 
     def __init__(self, port, baud_rate, move_delay):
         """
@@ -103,10 +79,7 @@ class LiBoard:
         self._start_handler: Optional[Callable[[LiBoard], bool]] = None
         self._move_handler: Optional[Callable[[LiBoard, chess.Move], bool]] = None
 
-        # data corresponding to the position of self.chessboard
-        self._known_position_data: Bits = LiBoard.STARTING_POSITION
-        # data incoming from the board
-        self._physical_position_data = self._known_position_data
+        self._physical_position = _STARTING_POSITION  # data incoming from the board
         self._last_change = time_ns()
         self._pos_checked = False
         self._lifted_pieces = set()
@@ -118,7 +91,6 @@ class LiBoard:
     def start_game(self):
         """Reset the chessboard to start a new game. Call the start handler."""
         self.chessboard.reset()
-        self._known_position_data = LiBoard.STARTING_POSITION
         self._lifted_pieces = set()
         if self._start_handler is not None:
             self._start_handler(self)
@@ -129,25 +101,26 @@ class LiBoard:
         new move if the data hasn't changed for self._move_delay nanoseconds.
         """
         self._get_board_data()
-        if self._physical_position_data != self._known_position_data and \
+        if self._physical_position != _PhysicalPosition(self.chessboard.occupied) and \
                 time_ns() >= (self._last_change + self._move_delay * (10 ** 6)) and not self._pos_checked:
             self._generate_move()
 
     def _get_board_data(self):
         """
         Get the data from the connected LiBoard.
-        The new board data will be stored in self._physical_position_data.
+        The new board data will be stored in self._physical_position.
         """
         if self._serial.in_waiting >= 8:
-            self._physical_position_data = Bits(self._serial.read(8))
-            if LiBoard._is_starting_position(self._physical_position_data):
+            self._physical_position = _PhysicalPosition(Bits(self._serial.read(8)))
+            if self._physical_position == _STARTING_POSITION:
                 return self.start_game()
             self._pos_checked = False
             self._last_change = time_ns()
             # Add all squares which were occupied after the last move but aren't now to _lifted_pieces.
             # This is necessary to be able to recognise captures.
-            self._lifted_pieces.update(LiBoard._get_occupied_squares(self._known_position_data).difference(
-                LiBoard._get_occupied_squares(self._physical_position_data)))
+            self._lifted_pieces.update(
+                _PhysicalPosition(self.chessboard.occupied).occupied_squares.difference(
+                    self._physical_position.occupied_squares))
 
     # region Handler decorators
     def start_handler(self, handler: Callable[['LiBoard'], bool]):
@@ -165,17 +138,16 @@ class LiBoard:
     # region Making moves out of raw data
     def _generate_move(self) -> bool:
         """
-        Try to generate a move leading from _known_position_data to _physical_position_data.
+        Try to generate a move matching the data.
         :return: True if a legal move was found.
         """
         self._pos_checked = True
 
         # region Determinate delta between last known and physical position
         # Get the indices of the occupied squares in the current and the last known position.
-        current_position_occupied_squares = LiBoard._get_occupied_squares(
-            self._known_position_data)
-        known_position_occupied_squares = LiBoard._get_occupied_squares(
-            self._physical_position_data)
+        current_position_occupied_squares = _PhysicalPosition(
+            Bits(uint=self.chessboard.occupied, length=64)).occupied_squares
+        known_position_occupied_squares = self._physical_position.occupied_squares
 
         # Get the differences between the occupied squares in the current and the last known position.
         disappearances = current_position_occupied_squares.difference(
@@ -237,7 +209,6 @@ class LiBoard:
         # Usually, every move given as an argument should be legal, as it was returned by self.chessboard.find_move.
         # However, self.chessboard.push doesn't check for legality, so I'll leave this check as a safety measure.
         if move in self.chessboard.legal_moves:
-            self._known_position_data = self._physical_position_data
             self._lifted_pieces = set()
             self.chessboard.push(move)
             if self._move_handler is not None:
