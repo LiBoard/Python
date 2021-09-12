@@ -41,6 +41,27 @@ def _arg_parser():
     return parser
 
 
+class _PhysicalPosition:
+    def __init__(self, *args):
+        if len(args) != 1:
+            raise IndexError
+        if type(args[0]) == Bits:
+            self.bits = args[0]
+        elif type(args[0]) == chess.Board:
+            self.bits = Bits(uint=args[0].occupied, length=64)
+        else:
+            raise TypeError
+        self.occupied_squares = {63 - i for i in self.bits.findall('0b1')}
+
+    def __eq__(self, other):
+        if type(other) == _PhysicalPosition:
+            return other.bits == self.bits
+        return super.__eq__(self, other)
+
+
+_STARTING_POSITION = _PhysicalPosition(Bits(hex='FFFF00000000FFFF'))
+
+
 class LiBoard:
     """Represents a LiBoard-type electronic chessboard."""
     STARTING_POSITION = Bits(hex='FFFF00000000FFFF')  # LERF
