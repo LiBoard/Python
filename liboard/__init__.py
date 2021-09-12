@@ -135,7 +135,7 @@ class LiBoard:
 
     # endregion
 
-    # region Making moves out of raw data
+    # region Move detection
     def _generate_move(self) -> bool:
         """
         Try to generate a move matching the data.
