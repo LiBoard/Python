@@ -101,7 +101,7 @@ class LiBoard:
         new move if the data hasn't changed for self._move_delay nanoseconds.
         """
         self._get_board_data()
-        if self._physical_position != _PhysicalPosition(self.chessboard.occupied) and \
+        if self._physical_position != _PhysicalPosition(self.chessboard) and \
                 time_ns() >= (self._last_change + self._move_delay * (10 ** 6)) and not self._pos_checked:
             self._generate_move()
 
@@ -119,7 +119,7 @@ class LiBoard:
             # Add all squares which were occupied after the last move but aren't now to _lifted_pieces.
             # This is necessary to be able to recognise captures.
             self._lifted_pieces.update(
-                _PhysicalPosition(self.chessboard.occupied).occupied_squares.difference(
+                _PhysicalPosition(self.chessboard).occupied_squares.difference(
                     self._physical_position.occupied_squares))
 
     # region Handler decorators
