@@ -13,14 +13,14 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+"""Interact with LiBoard-type electronic chessboards."""
+
 import argparse
 from collections.abc import Set
 from typing import Any, Union
 
 import chess
-from collections.abc import Set
 from bitstring import Bits
-from typing import Union, Any
 
 ARGUMENT_PARSER = argparse.ArgumentParser(add_help=False)
 ARGUMENT_PARSER.add_argument('-p', '--port', default='/dev/ttyACM0',
@@ -53,21 +53,26 @@ class Bitboard:
 
     @property
     def bits(self):
+        """Return the bits of this bitboard."""
         return self._bits
 
     def __eq__(self, other: Any) -> bool:
+        """Whether this Bitboard is equal to other."""
         if isinstance(other, Bitboard):
             return other.bits == self.bits
         elif isinstance(other, Bits):
             return other == self.bits
         elif isinstance(other, Set):
             return other == self.occupied
+        elif isinstance(other, bytes):
+            return Bits(other) == self.bits
         elif isinstance(other, chess.Board):
-            return Bitboard(other) == self
+            return Bits(uint=other.occupied, length=64) == self.bits
         else:
             return False
 
     def __contains__(self, item: Any) -> bool:
+        """Whether this Bitboard contains item."""
         if isinstance(item, int):
             return item in self.occupied
         else:
