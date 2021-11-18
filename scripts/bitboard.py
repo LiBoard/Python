@@ -19,8 +19,20 @@
 
 import argparse
 
-from bitstring import Bits
-from serial import Serial
+from liboard import Bitboard
+from liboard.physical import USBBoard
+
+
+def _callback(bitboard: Bitboard):
+    print(bitboard.bits.bin)
+
+
+def _main(args):
+    board = USBBoard(_callback, args.port, args.baud_rate)
+
+    with board.connect():
+        board.listen_forever()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
@@ -29,13 +41,4 @@ if __name__ == '__main__':
                              '(Default /dev/ttyACM0)')
     parser.add_argument('-b', '--baud-rate', default=9600, type=int,
                         help='The board\'s baud rate (Default 9600)')
-    args = parser.parse_args()
-    try:
-        with Serial(args.port, args.baud_rate) as arduino:
-            while True:
-                if arduino.in_waiting >= 8:
-                    data = Bits(arduino.read(8))
-                    print(data.bin)
-                    print()
-    except KeyboardInterrupt:
-        pass
+    _main(parser.parse_args())

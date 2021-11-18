@@ -20,80 +20,71 @@
 import argparse
 import curses
 import datetime
-import sys
+from time import sleep
 
-import chess
 import chess.pgn
+from chess import Board
 
-import liboard
-from liboard import LiBoard
+from liboard import ARGUMENT_PARSER
+from liboard.move_recognition import MoveRecognizer
+from liboard.physical import USBBoard
 
 global game, node
 
 
-def _main(stdscreen: curses.window, args: argparse.Namespace):
-    board = LiBoard(args.port, args.baud_rate, args.move_delay)
+def _main(stdscreen: curses.window, _args: argparse.Namespace):
+    curses.curs_set(False)
+    curses.use_default_colors()
+
     global game, node
     game = chess.pgn.Game()
     game.headers['Date'] = datetime.datetime.now().strftime('%Y.%m.%d')
     node = game
 
-    curses.curs_set(False)
-    curses.use_default_colors()
+    def _callback(board: Board):
+        global game, node
+        stdscreen.clear()
+        if not board.ply():
+            node = game
+            stdscreen.addstr('New game.\n')
+        else:
+            move = board.move_stack[-1]
+            if any(variation.move == move for variation in node.variations):
+                node.promote_to_main(move)
+                node = node.next()
+            else:
+                node = node.add_main_variation(move)
+            stdscreen.addstr(
+                '{num}. {ellipsis}{san}\n'.format(num=int((node.ply() + 1) / 2),
+                                                  ellipsis=('' if node.ply() % 2 else '...'),
+                                                  san=node.san()))
+        stdscreen.addstr(str(board))
+        stdscreen.refresh()
+
+    recognizer = MoveRecognizer(_callback, _args.move_delay)
+    usb_board = USBBoard(recognizer.on_event, _args.port, _args.baud_rate)
 
     stdscreen.clear()
     stdscreen.addstr('Ready to start.')
     stdscreen.refresh()
-
-    @board.start_handler
-    def print_start_message(_board: LiBoard) -> bool:
-        global game, node
-        node = game
-        stdscreen.clear()
-        stdscreen.addstr('New game.\n')
-        stdscreen.addstr(str(_board.chessboard))
-        stdscreen.refresh()
-        return False
-
-    @board.move_handler
-    def print_move(_board: LiBoard, _move: chess.Move) -> bool:
-        global node
-        if any(variation.move == _move for variation in node.variations):
-            node.promote_to_main(_move)
-            node = node.next()
-        else:
-            node = node.add_main_variation(_move)
-        stdscreen.clear()
-        stdscreen.addstr(
-            '{num}. {ellipsis}{san}\n'.format(num=int((node.ply() + 1) / 2),
-                                              ellipsis=('' if node.ply() % 2 else '...'),
-                                              san=node.san()))
-        stdscreen.addstr(str(_board.chessboard))
-        stdscreen.refresh()
-        return False
-
-    while True:
-        board.update()
+    with usb_board.connect():
+        while True:
+            usb_board.tick()
+            recognizer.tick()
+            sleep(_args.move_delay / 5000)  # helps reducing CPU load
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, parents=[liboard.ARGUMENT_PARSER])
+    parser = argparse.ArgumentParser(description=__doc__, parents=[ARGUMENT_PARSER])
     parser.add_argument('-o', '--output-file', default='',
                         help='Optional file to write the pgn to')
     args = parser.parse_args()
-
-    exit_code = 0
-    # noinspection PyBroadException
     try:
         curses.wrapper(_main, args)
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        print(e, file=sys.stderr)
-        exit_code = 1
     finally:
         print(game)
         if args.output_file:
             with open(args.output_file, 'a') as of:
                 of.write(str(game))
-        sys.exit(exit_code)

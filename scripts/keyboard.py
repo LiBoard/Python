@@ -16,41 +16,44 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import argparse
+from time import sleep
 
-import chess
-import chess.pgn
 import pyautogui
+from chess import BLACK, WHITE
 
-import liboard
-from liboard import LiBoard
+from liboard import ARGUMENT_PARSER
+from liboard.move_recognition import MoveRecognizer
+from liboard.physical import USBBoard
 
 
-def _main(_args: argparse.Namespace):
-    board = LiBoard(_args.port, _args.baud_rate, _args.move_delay)
+def _main(args: argparse.Namespace):
+    def _callback(*event):
+        board, = event
+        if not board.ply():
+            print('New game.')
+        else:
+            move = board.move_stack[-1]
+            print(move)
+            if board.turn != args.turn:
+                pyautogui.write(str(move))
 
-    @board.start_handler
-    def print_start(_board: LiBoard) -> bool:
-        print("New game.")
-        return False
+    recognizer = MoveRecognizer(_callback, args.move_delay)
+    usb_board = USBBoard(recognizer.on_event, args.port, args.baud_rate)
 
-    @board.move_handler
-    def print_move(_board: LiBoard, _move: chess.Move) -> bool:
-        print(_move)
-        if bool(_board.chessboard.ply() % 2) != args.side:
-            pyautogui.write(str(_move))
-        return False
-
-    while True:
-        board.update()
+    with usb_board.connect():
+        while True:
+            usb_board.tick()
+            recognizer.tick()
+            sleep(args.move_delay / 5000)  # helps reducing CPU load
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, parents=[liboard.ARGUMENT_PARSER])
-    parser.add_argument('-B', '--black', action='store_const', dest='side', default=0, const=1,
-                        help='Play as black')
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(description=__doc__, parents=[ARGUMENT_PARSER])
+    parser.add_argument('-B', '--black', action='store_const', dest='turn', default=WHITE,
+                        const=BLACK, help='Play as black')
     try:
-        _main(args)
+        _main(parser.parse_args())
     except KeyboardInterrupt:
         pass
