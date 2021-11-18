@@ -2,3 +2,4 @@ __pycache__/
 liboard.egg-info/
 poetry.lock
 dist/
+.coverage
