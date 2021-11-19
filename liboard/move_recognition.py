@@ -14,17 +14,17 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """LiBoard submodule for recognizing moves."""
-
+from enum import Enum, auto
 from time import perf_counter_ns
 from typing import Callable, Optional, Union
 
-from chess import Board, Move
+from chess import Board, Color, Move, WHITE
 
 from liboard import Bitboard
 
 
 class MoveRecognizer:
-    """Handles move recognition for both sides."""
+    """Handles move recognition."""
 
     def __init__(self, callback: Callable, move_delay: int = 0):
         """
@@ -48,16 +48,14 @@ class MoveRecognizer:
 
     def tick(self):
         """Check whether it's time to try generating a move."""
-        if self._bitboard != Bitboard(self._vboard) and perf_counter_ns() >= (
+        if self._bitboard != self._vboard and perf_counter_ns() >= (
                 self._bb_timestamp + self._move_delay * 10 ** 6):
             disappearances = Bitboard(self._vboard).occupied - self._bitboard.occupied
             appearances = self._bitboard.occupied - Bitboard(self._vboard).occupied
             tmp_lifted = self._lifted & self._bitboard.occupied
             move = self._find_move(disappearances, appearances, tmp_lifted)
             if move:
-                self._lifted.clear()
-                self._vboard.push(move)
-                self._callback(self._vboard)
+                self._make_move(move)
 
     def on_event(self, event: Union[str, Bitboard]):
         """Handle events related to the PhysicalBoard."""
@@ -105,3 +103,71 @@ class MoveRecognizer:
                 return self._candidate_move('en-passant', disappearances, appearances)
             elif len(appearances) == 2:
                 return self._candidate_move('castling', disappearances, appearances)
+
+    def _make_move(self, move: Move):
+        self._lifted.clear()
+        self._vboard.push(move)
+        self._callback(self._vboard)
+
+
+class BoardApiMoveRecognizer(MoveRecognizer):
+    """Handles move recognition when using the Board API."""
+
+    def __init__(self, callback: Callable, move_delay: int = 0):
+        """
+        Initialize a new BoardApiMoveRecognizer.
+
+        :param callback: a callback for new games and moves
+        :param move_delay: delay before recognizing a move in ms
+        """
+        super().__init__(callback, move_delay)
+        self._phase: Phase = Phase.IDLE
+        self._side: Color = WHITE
+
+    # region Properties
+    @property
+    def side(self):
+        """Return the player's side."""
+        return self._side
+
+    @side.setter
+    def side(self, side):
+        self._side = side
+        if self._phase != Phase.CATCH_UP:
+            self._phase = (Phase.RECOGNIZE if self._vboard.turn == self.side else Phase.IDLE)
+
+    # endregion
+
+    def tick(self):
+        """Check whether it's time to try generating a move."""
+        if self._phase == Phase.RECOGNIZE:
+            super().tick()
+
+    def handle_streamed_moves(self, moves: str):
+        """Handle moves streamed from the board API."""
+        self._vboard.reset()
+        for uci in moves.split(' '):
+            self._vboard.push_uci(uci)
+
+        self._lifted.clear()
+        self._phase = (Phase.CATCH_UP if self._bitboard != self._vboard
+                       else (Phase.RECOGNIZE if self._vboard.turn == self.side else Phase.IDLE))
+
+    def _on_new_bitboard(self, bitboard: Bitboard):
+        self._bitboard = bitboard
+        if self._phase == Phase.CATCH_UP and self._bitboard == self._vboard:
+            self._phase = (Phase.RECOGNIZE if self._vboard.turn == self.side else Phase.IDLE)
+        elif self._phase == Phase.RECOGNIZE:
+            self._lifted.update(Bitboard(self._vboard).occupied - self._bitboard.occupied)
+
+    def _make_move(self, move: Move):
+        self._phase = Phase.IDLE
+        super()._make_move(move)
+
+
+class Phase(Enum):
+    """Phases of move recognition."""
+
+    RECOGNIZE = auto()
+    IDLE = auto()
+    CATCH_UP = auto()
