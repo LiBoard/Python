@@ -13,10 +13,23 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import argparse
+from collections.abc import Set
+from typing import Any, Union
+
 import chess
 from collections.abc import Set
 from bitstring import Bits
 from typing import Union, Any
+
+ARGUMENT_PARSER = argparse.ArgumentParser(add_help=False)
+ARGUMENT_PARSER.add_argument('-p', '--port', default='/dev/ttyACM0',
+                             help='The serial port which the board is connected to ' +
+                                  '(Default /dev/ttyACM0)')
+ARGUMENT_PARSER.add_argument('-b', '--baud-rate', default=9600, type=int,
+                             help='The board\'s baud rate (Default 9600)')
+ARGUMENT_PARSER.add_argument('-d', '--move-delay', default=0, type=int,
+                             help='The delay before a move is recognized (Default 0)')
 
 
 class Bitboard:
