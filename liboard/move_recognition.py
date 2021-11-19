@@ -14,11 +14,13 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """LiBoard submodule for recognizing moves."""
+
+import logging
 from enum import Enum, auto
 from time import perf_counter_ns
 from typing import Callable, Optional, Union
 
-from chess import Board, Color, Move, WHITE
+from chess import Board, Move
 
 from liboard import Bitboard
 
@@ -121,53 +123,46 @@ class BoardApiMoveRecognizer(MoveRecognizer):
         :param move_delay: delay before recognizing a move in ms
         """
         super().__init__(callback, move_delay)
-        self._phase: Phase = Phase.IDLE
-        self._side: Color = WHITE
+        self._phase: Phase = Phase.RECOGNIZE
 
-    # region Properties
     @property
-    def side(self):
-        """Return the player's side."""
-        return self._side
+    def phase(self):
+        """Return the current phase."""
+        return self._phase
 
-    @side.setter
-    def side(self, side):
-        self._side = side
-        if self._phase != Phase.CATCH_UP:
-            self._phase = (Phase.RECOGNIZE if self._vboard.turn == self.side else Phase.IDLE)
-
-    # endregion
+    @phase.setter
+    def phase(self, phase):
+        self._phase = phase
+        logging.info(f'Phase {phase}')
 
     def tick(self):
         """Check whether it's time to try generating a move."""
-        if self._phase == Phase.RECOGNIZE:
+        if self.phase == Phase.RECOGNIZE:
             super().tick()
 
     def handle_streamed_moves(self, moves: str):
         """Handle moves streamed from the board API."""
+        logging.debug(f'Streamed moves: {moves}')
+
         self._vboard.reset()
+        self._lifted.clear()
         for uci in moves.split(' '):
             self._vboard.push_uci(uci)
-
-        self._lifted.clear()
-        self._phase = (Phase.CATCH_UP if self._bitboard != self._vboard
-                       else (Phase.RECOGNIZE if self._vboard.turn == self.side else Phase.IDLE))
+        if self._bitboard != self._vboard:
+            self.phase = Phase.CATCH_UP
 
     def _on_new_bitboard(self, bitboard: Bitboard):
+        logging.debug(f'Bitboard:\n{bitboard}')
         self._bitboard = bitboard
-        if self._phase == Phase.CATCH_UP and self._bitboard == self._vboard:
-            self._phase = (Phase.RECOGNIZE if self._vboard.turn == self.side else Phase.IDLE)
-        elif self._phase == Phase.RECOGNIZE:
+        self._bb_timestamp = perf_counter_ns()
+        if self.phase == Phase.CATCH_UP and self._bitboard == self._vboard:
+            self.phase = Phase.RECOGNIZE
+        elif self.phase == Phase.RECOGNIZE:
             self._lifted.update(Bitboard(self._vboard).occupied - self._bitboard.occupied)
-
-    def _make_move(self, move: Move):
-        self._phase = Phase.IDLE
-        super()._make_move(move)
 
 
 class Phase(Enum):
     """Phases of move recognition."""
 
     RECOGNIZE = auto()
-    IDLE = auto()
     CATCH_UP = auto()
