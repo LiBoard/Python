@@ -49,7 +49,7 @@ class Bitboard:
             self._bits: Bits = Bits(board)
         else:
             raise TypeError('board must be Bits|Board|bytes')
-        self.occupied = frozenset((63-i for (i, v) in enumerate(self._bits) if v))
+        self.occupied = frozenset((63 - i for (i, v) in enumerate(self._bits) if v))
 
     @property
     def bits(self):
@@ -77,3 +77,12 @@ class Bitboard:
             return item in self.occupied
         else:
             return False
+
+    def __repr__(self):
+        """Make a nice representation."""
+        s = ''
+        for rank in reversed(range(8)):
+            for file in range(8):
+                s += 'X' if rank * 8 + file in self.occupied else '.'
+            s += '\n'
+        return s
