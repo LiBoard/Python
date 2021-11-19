@@ -29,8 +29,7 @@ from liboard.physical import USBBoard
 
 
 def _main(args: argparse.Namespace):
-    def _callback(*event):
-        board, = event
+    def _callback(board):
         if not board.ply():
             print('New game.')
         else:
