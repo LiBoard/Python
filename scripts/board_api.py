@@ -18,17 +18,12 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
-import json
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
-from time import sleep
-
-import requests
-from chess import Board
+from asyncio import gather, run, sleep
 
 from liboard import ARGUMENT_PARSER
-from liboard.move_recognition import BoardApiMoveRecognizer
+from liboard.lichess import APIConnection, EventPasser
+from liboard.move_recognition import BoardAPIMoveRecognizer
 from liboard.physical import USBBoard
 
 
@@ -39,79 +34,22 @@ def _init_logging(args):
         logging.basicConfig(level=logging.DEBUG)
 
 
-def _stream(url, headers):
-    stream = requests.get(url, headers=headers, stream=True)
-    if stream.encoding is None:
-        stream.encoding = 'utf-8'
-    yield from (json.loads(item) for item in stream.iter_lines(decode_unicode=True) if item)
-
-
-def _watch_events(queue, headers):
-    for _item in _stream('https://lichess.org/api/stream/event', headers):
-        logging.debug(_item)
-        queue.put(_item)
-
-
-def _watch_moves(queue, headers, game_id):
-    for _item in _stream(f'https://lichess.org/api/board/game/stream/{game_id}', headers):
-        logging.debug(_item)
-        state = _item if _item['type'] == 'gameState' \
-            else _item['state'] if _item['type'] == 'gameFull' else None
-        if state:
-            if state['status'] != 'started':
-                logging.info(f"Status: {state['status']}")
-                return
-            queue.put(state['moves'])
-
-
-def _tick(*args, delay=0):
+async def _tick(*args, delay=0):
     while True:
-        for t in args:
-            t.tick()
-        sleep(delay)
+        for a in args:
+            a.tick()
+        await sleep(delay)
 
 
-def _main(args: argparse.Namespace):
+async def _main(args: argparse.Namespace):
     _init_logging(args)
-    headers = {'Authorization': f'Bearer {args.token}'}
-    queue = Queue()
-    game_id = ''
-
-    def _callback(board: Board):
-        if board.ply():
-            move = board.move_stack[-1]
-            logging.info(f'Move: {move}')
-            requests.post(
-                f'https://lichess.org/api/board/game/{game_id}/move/{move}',
-                headers=headers)
-
-    recognizer = BoardApiMoveRecognizer(_callback, args.move_delay)
-    usb_board = USBBoard(recognizer.on_event, args.port, args.baud_rate)
-
-    logging.debug('Connecting to board')
-    with ThreadPoolExecutor() as executor, usb_board.connection():
-        logging.debug('Starting _watch_events')
-        executor.submit(_watch_events, queue, headers)
-        logging.debug('Starting ticks')
-        executor.submit(_tick, usb_board, recognizer, delay=args.move_delay / 5000)
-        while True:
-            item = queue.get()
-            if isinstance(item, dict):
-                if item['type'] == 'gameStart':
-                    if item['game']['compat']['board']:
-                        game_id = item['game']['id']
-                        logging.info(f'Game {game_id} started')
-                        executor.submit(_watch_moves, queue, headers, game_id)
-                    else:
-                        logging.warning(
-                            f"Board incompatible game {item['game']['id']}")
-                elif item['type'] == 'gameFinish':
-                    logging.debug(f"gameFinish {item['game']['id']}")
-                    if item['game']['id'] == game_id:
-                        logging.debug(f'Game {game_id} finished')
-                        game_id = ''
-            elif isinstance(item, str):
-                recognizer.handle_streamed_moves(item)
+    passer = EventPasser()
+    recognizer = BoardAPIMoveRecognizer(passer.pass_to_api, move_delay=args.move_delay)
+    board = USBBoard(recognizer.on_event, port=args.port, baud_rate=args.baud_rate)
+    with board.connection():
+        async with APIConnection(args.token, passer.pass_to_recognizer) as connection:
+            passer.recognizer, passer.connection = recognizer, connection
+            await gather(_tick(board, recognizer, delay=args.move_delay / 5000), connection.loop())
 
 
 if __name__ == '__main__':
@@ -119,6 +57,6 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--token', type=str, help='Personal Access Token')
     parser.add_argument('-D', '--debug', type=str, default='info', help='Debug mode')
     try:
-        _main(parser.parse_args())
+        run(_main(parser.parse_args()))
     except KeyboardInterrupt:
         pass
