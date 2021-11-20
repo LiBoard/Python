@@ -41,7 +41,7 @@ def _main(args: argparse.Namespace):
     recognizer = MoveRecognizer(_callback, args.move_delay)
     usb_board = USBBoard(recognizer.on_event, args.port, args.baud_rate)
 
-    with usb_board.connect():
+    with usb_board.connection():
         while True:
             usb_board.tick()
             recognizer.tick()

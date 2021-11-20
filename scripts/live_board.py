@@ -67,7 +67,7 @@ def _main(stdscreen: curses.window, _args: argparse.Namespace):
     stdscreen.clear()
     stdscreen.addstr('Ready to start.')
     stdscreen.refresh()
-    with usb_board.connect():
+    with usb_board.connection():
         while True:
             usb_board.tick()
             recognizer.tick()

@@ -89,7 +89,7 @@ def _main(args: argparse.Namespace):
     usb_board = USBBoard(recognizer.on_event, args.port, args.baud_rate)
 
     logging.debug('Connecting to board')
-    with ThreadPoolExecutor() as executor, usb_board.connect():
+    with ThreadPoolExecutor() as executor, usb_board.connection():
         logging.debug('Starting _watch_events')
         executor.submit(_watch_events, queue, headers)
         logging.debug('Starting ticks')

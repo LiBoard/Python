@@ -16,6 +16,7 @@
 """LiBoard submodule for communication with physical boards."""
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import Any, Callable, Optional, Union
 
 from serial import Serial
@@ -38,7 +39,6 @@ class PhysicalBoard(ABC):
         self._callback: Callable[[Union[str, Bitboard]], Any] = callback
         self._configurable: bool = configurable
 
-    # region Properties
     @property
     def is_configurable(self):
         """Whether the board can be communicated with in order to change its settings."""
@@ -50,29 +50,16 @@ class PhysicalBoard(ABC):
         """Whether there's currently a connection to the board."""
         return False
 
-    # endregion
-
-    # region Connection
     @abstractmethod
-    def connect(self):
+    @contextmanager
+    def connection(self):
         """Connect to the board."""
-        pass
-
-    @abstractmethod
-    def disconnect(self):
-        """Disconnect the board."""
         pass
 
     @abstractmethod
     def tick(self):
         """Check for new data and call the callback if necessary."""
         pass
-
-    def listen_forever(self):
-        """Call self.tick() in an infinite loop."""
-        while True:
-            self.tick()
-    # endregion
 
 
 class USBBoard(PhysicalBoard):
@@ -91,31 +78,22 @@ class USBBoard(PhysicalBoard):
         self._baud_rate: int = baud_rate
         self._connection: Optional[Serial] = None
 
-    # region Properties@property
+    @property
     def is_connected(self):
         """Whether there's currently a connection to the board."""
-        return self._connection is not None and self._connection.is_open
+        return self._connection and self._connection.is_open
 
-    # endregion
-
-    # region Connection
-    def connect(self):
+    @contextmanager
+    def connection(self):
         """Connect to the board."""
-        if not self.is_connected():
-            if self._connection is not None:
-                self._connection.open()
-            else:
-                self._connection = Serial(self._port, self._baud_rate)
-        return self._connection
-
-    def disconnect(self):
-        """Disconnect the board."""
-        if self.is_connected:
+        try:
+            self._connection = Serial(self._port, self._baud_rate)
+            yield self._connection
+        finally:
             self._connection.close()
+            self._connection = None
 
     def tick(self):
         """Check for new data and call the callback if necessary."""
-        if self.is_connected() and self._connection.in_waiting >= 8:
+        if self.is_connected and self._connection.in_waiting >= 8:
             self._callback(Bitboard(self._connection.read(8)))
-
-    # endregion

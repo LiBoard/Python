@@ -30,8 +30,9 @@ def _callback(bitboard: Bitboard):
 def _main(args):
     board = USBBoard(_callback, args.port, args.baud_rate)
 
-    with board.connect():
-        board.listen_forever()
+    with board.connection():
+        while True:
+            board.tick()
 
 
 if __name__ == '__main__':
