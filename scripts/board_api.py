@@ -78,7 +78,7 @@ def _main(args: argparse.Namespace):
     game_id = ''
 
     def _callback(board: Board):
-        if board.ply:
+        if board.ply():
             move = board.move_stack[-1]
             logging.info(f'Move: {move}')
             requests.post(

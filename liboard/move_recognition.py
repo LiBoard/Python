@@ -123,7 +123,7 @@ class BoardApiMoveRecognizer(MoveRecognizer):
         :param move_delay: delay before recognizing a move in ms
         """
         super().__init__(callback, move_delay)
-        self._phase: Phase = Phase.RECOGNIZE
+        self._phase: Phase = Phase.CATCH_UP
 
     @property
     def phase(self):
@@ -146,7 +146,7 @@ class BoardApiMoveRecognizer(MoveRecognizer):
 
         self._vboard.reset()
         self._lifted.clear()
-        for uci in moves.split(' '):
+        for uci in moves.split():
             self._vboard.push_uci(uci)
         if self._bitboard != self._vboard:
             self.phase = Phase.CATCH_UP
