@@ -112,7 +112,7 @@ class MoveRecognizer:
         self._callback(self._vboard)
 
 
-class BoardApiMoveRecognizer(MoveRecognizer):
+class BoardAPIMoveRecognizer(MoveRecognizer):
     """Handles move recognition when using the Board API."""
 
     def __init__(self, callback: Callable, move_delay: int = 0):
