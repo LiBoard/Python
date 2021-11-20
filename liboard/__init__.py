@@ -28,8 +28,8 @@ ARGUMENT_PARSER.add_argument('-p', '--port', default='/dev/ttyACM0',
                                   '(Default /dev/ttyACM0)')
 ARGUMENT_PARSER.add_argument('-b', '--baud-rate', default=9600, type=int,
                              help='The board\'s baud rate (Default 9600)')
-ARGUMENT_PARSER.add_argument('-d', '--move-delay', default=0, type=int,
-                             help='The delay before a move is recognized (Default 0)')
+ARGUMENT_PARSER.add_argument('-d', '--move-delay', default=200, type=int,
+                             help='The delay before a move is recognized (Default 200)')
 
 
 class Bitboard:
