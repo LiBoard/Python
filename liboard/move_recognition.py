@@ -16,6 +16,7 @@
 """LiBoard submodule for recognizing moves."""
 
 import logging
+from asyncio import Task, create_task, sleep
 from enum import Enum, auto
 from time import perf_counter_ns
 from typing import Callable, Optional, Union
@@ -47,17 +48,7 @@ class MoveRecognizer:
             'en-passant': lambda m: self._vboard.is_en_passant(m),
             'castling': lambda m: self._vboard.is_castling(m)
         }
-
-    def tick(self):
-        """Check whether it's time to try generating a move."""
-        if self._bitboard != self._vboard and perf_counter_ns() >= (
-                self._bb_timestamp + self._move_delay * 10 ** 6):
-            disappearances = Bitboard(self._vboard).occupied - self._bitboard.occupied
-            appearances = self._bitboard.occupied - Bitboard(self._vboard).occupied
-            tmp_lifted = self._lifted & self._bitboard.occupied
-            move = self._find_move(disappearances, appearances, tmp_lifted)
-            if move:
-                self._make_move(move)
+        self._task: Optional[Task] = None
 
     def on_event(self, event: Union[str, Bitboard]):
         """Handle events related to the PhysicalBoard."""
@@ -73,6 +64,7 @@ class MoveRecognizer:
             self._start_game()
         else:
             self._lifted.update(Bitboard(self._vboard).occupied - self._bitboard.occupied)
+            self._schedule_move_check()
 
     def _start_game(self):
         """Start a new game."""
@@ -111,6 +103,20 @@ class MoveRecognizer:
         self._vboard.push(move)
         self._callback(self._vboard)
 
+    async def _check_for_move(self, disappearances: set[int], appearances: set[int],
+                              tmp_lifted: set[int]):
+        await sleep(self._move_delay)
+        if move := self._find_move(disappearances, appearances, tmp_lifted):
+            self._make_move(move)
+
+    def _schedule_move_check(self):
+        if self._task:
+            self._task.cancel()
+        disappearances = Bitboard(self._vboard).occupied - self._bitboard.occupied
+        appearances = self._bitboard.occupied - Bitboard(self._vboard).occupied
+        tmp_lifted = self._lifted & self._bitboard.occupied
+        self._task = create_task(self._check_for_move(disappearances, appearances, tmp_lifted))
+
 
 class BoardAPIMoveRecognizer(MoveRecognizer):
     """Handles move recognition when using the Board API."""
@@ -135,11 +141,6 @@ class BoardAPIMoveRecognizer(MoveRecognizer):
         self._phase = phase
         logging.info(f'Phase {phase}')
 
-    def tick(self):
-        """Check whether it's time to try generating a move."""
-        if self.phase == Phase.RECOGNIZE:
-            super().tick()
-
     def handle_streamed_moves(self, moves: str):
         """Handle moves streamed from the board API."""
         logging.debug(f'Streamed moves: {moves}')
@@ -159,6 +160,11 @@ class BoardAPIMoveRecognizer(MoveRecognizer):
             self.phase = Phase.RECOGNIZE
         elif self.phase == Phase.RECOGNIZE:
             self._lifted.update(Bitboard(self._vboard).occupied - self._bitboard.occupied)
+            self._schedule_move_check()
+
+    def _start_game(self):
+        # BoardAPIMoveRecognizer should ignore game starts
+        pass
 
 
 class Phase(Enum):
