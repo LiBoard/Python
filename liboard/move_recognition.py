@@ -36,30 +36,26 @@ class MoveRecognizer:
         :param callback: a callback for new games and moves
         :param move_delay: delay before recognizing a move in ms
         """
+        # general properties
+        self._callback: Callable = callback
+        self._move_delay: int = move_delay
+
+        # used for move recognition
         self._vboard: Board = Board()
         self._bitboard: Bitboard = Bitboard()
         self._lifted: set = set()
-        self._bb_timestamp: int = perf_counter_ns()
-        self._move_delay: int = move_delay
-        self._callback: Callable = callback
-        self._move_types = {
-            'normal': lambda m: not (self._vboard.is_capture(m) or self._vboard.is_castling(m)),
-            'capture': lambda m: self._vboard.is_capture(m) and not self._vboard.is_en_passant(m),
-            'en-passant': lambda m: self._vboard.is_en_passant(m),
-            'castling': lambda m: self._vboard.is_castling(m)
-        }
         self._task: Optional[Task] = None
 
     def on_event(self, event: Union[str, Bitboard]):
-        """Handle events related to the PhysicalBoard."""
+        """Handle incoming events."""
         if isinstance(event, str):
             pass
         elif isinstance(event, Bitboard):
             self._on_new_bitboard(event)
 
     def _on_new_bitboard(self, bitboard: Bitboard):
+        """Handle a received bitboard."""
         self._bitboard = bitboard
-        self._bb_timestamp = perf_counter_ns()
         if self._bitboard == Bitboard():
             self._start_game()
         else:
@@ -67,25 +63,41 @@ class MoveRecognizer:
             self._schedule_move_check()
 
     def _start_game(self):
-        """Start a new game."""
+        """Do what's necessary when a new game is started."""
         self._vboard.reset()
         self._lifted.clear()
         self._callback(self._vboard.copy())
 
     def _candidate_move(self, move_type: str, from_set: set[int], to_set: set[int]):
+        """
+        Find the first move matching the supplied criteria.
+
+        :param move_type: The type the move should be.
+        :param from_set: A set of allowed departure squares.
+        :param to_set: A set of allowed arrival squares.
+        :return: The first legal move matching the criteria. None if no move matches.
+        """
         for from_square in from_set:
             for to_square in to_set:
                 try:
                     m = self._vboard.find_move(from_square, to_square)
-                    if self._move_types[move_type](m):
+                    if self._check_move_type(move_type, m):
                         return m
                 except ValueError:
                     pass
         return None
 
-    def _find_move(self, disappearances: set[int], appearances: set[int],
-                   tmp_lifted: set[int]) -> Optional[Move]:
-        self._bb_timestamp += 10 ** 10
+    def _find_matching_move(self, disappearances: set[int], appearances: set[int],
+                            tmp_lifted: set[int]) -> Optional[Move]:
+        """
+        Find the first move matching the supplied change in occupied squares.
+
+        :param disappearances: All formerly occupied squares that are unoccupied now.
+        :param appearances: All formerly unoccupied squares that are unoccupied now.
+        :param tmp_lifted: All squares that are occupied in _vboard and _bitboard,
+            but were unoccupied at some point since the last move.
+        :return: The first move matching the data change or None if no move matches.
+        """
         # TODO underpromotions
         if len(disappearances) == 1:
             if len(appearances) == 1:
@@ -99,23 +111,37 @@ class MoveRecognizer:
                 return self._candidate_move('castling', disappearances, appearances)
 
     def _make_move(self, move: Move):
+        """Push a move, clear _lifted and call _callback."""
         self._lifted.clear()
         self._vboard.push(move)
         self._callback(self._vboard)
 
     async def _check_for_move(self, disappearances: set[int], appearances: set[int],
                               tmp_lifted: set[int]):
+        """Wait for _move_delay and then check if there's a matching move."""
         await sleep(self._move_delay)
-        if move := self._find_move(disappearances, appearances, tmp_lifted):
+        if move := self._find_matching_move(disappearances, appearances, tmp_lifted):
             self._make_move(move)
 
     def _schedule_move_check(self):
+        """Cancel the current task and call _check_for_move."""
         if self._task:
             self._task.cancel()
         disappearances = Bitboard(self._vboard).occupied - self._bitboard.occupied
         appearances = self._bitboard.occupied - Bitboard(self._vboard).occupied
         tmp_lifted = self._lifted & self._bitboard.occupied
         self._task = create_task(self._check_for_move(disappearances, appearances, tmp_lifted))
+
+    def _check_move_type(self, move_type: str, move: Move):
+        """Check whether m is of the given move_type."""
+        if move_type == 'normal':
+            return not (self._vboard.is_capture(move) or self._vboard.is_castling(move))
+        elif move_type == 'capture':
+            return self._vboard.is_capture(move) and not self._vboard.is_en_passant(move)
+        elif move_type == 'en-passant':
+            return self._vboard.is_en_passant(move)
+        elif move_type == 'castling':
+            return self._vboard.is_castling(move)
 
 
 class BoardAPIMoveRecognizer(MoveRecognizer):
@@ -153,6 +179,7 @@ class BoardAPIMoveRecognizer(MoveRecognizer):
             self.phase = Phase.CATCH_UP
 
     def _on_new_bitboard(self, bitboard: Bitboard):
+        """Handle a received bitboard."""
         logging.debug(f'Bitboard:\n{bitboard}')
         self._bitboard = bitboard
         self._bb_timestamp = perf_counter_ns()
@@ -163,7 +190,11 @@ class BoardAPIMoveRecognizer(MoveRecognizer):
             self._schedule_move_check()
 
     def _start_game(self):
-        # BoardAPIMoveRecognizer should ignore game starts
+        """
+        Do what's necessary when a new game is started.
+
+        For a BoardAPIMoveRecognizer, nothing should be done.
+        """
         pass
 
 
