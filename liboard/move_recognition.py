@@ -29,7 +29,7 @@ from liboard import Bitboard
 class MoveRecognizer:
     """Handles move recognition."""
 
-    def __init__(self, callback: Callable, move_delay: int = 0):
+    def __init__(self, callback: Callable, move_delay: float = 0.2):
         """
         Initialize a new MoveRecognizer.
 
@@ -38,7 +38,7 @@ class MoveRecognizer:
         """
         # general properties
         self._callback: Callable = callback
-        self._move_delay: int = move_delay
+        self._move_delay: float = move_delay
 
         # used for move recognition
         self._vboard: Board = Board()
@@ -119,7 +119,7 @@ class MoveRecognizer:
     async def _check_for_move(self, disappearances: set[int], appearances: set[int],
                               tmp_lifted: set[int]):
         """Wait for _move_delay and then check if there's a matching move."""
-        await sleep(self._move_delay/1000)
+        await sleep(self._move_delay)
         if move := self._find_matching_move(disappearances, appearances, tmp_lifted):
             self._make_move(move)
 
@@ -147,7 +147,7 @@ class MoveRecognizer:
 class BoardAPIMoveRecognizer(MoveRecognizer):
     """Handles move recognition when using the Board API."""
 
-    def __init__(self, callback: Callable, move_delay: int = 0):
+    def __init__(self, callback: Callable, move_delay: float = 0.2):
         """
         Initialize a new BoardApiMoveRecognizer.
 

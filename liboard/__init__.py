@@ -16,11 +16,28 @@
 """Interact with LiBoard-type electronic chessboards."""
 
 import argparse
+from argparse import ArgumentParser, Namespace
 from collections.abc import Set
-from typing import Any, Union
+from typing import Any, Optional, Sequence, Union
 
 import chess
 from bitstring import Bits
+
+
+class StoreProcessedAction(argparse.Action):
+    """Stores a value after applying a post-processing to it."""
+
+    def __init__(self, option_strings: Sequence[str], dest: str, processing, **kwargs):
+        """Initialize a StoreProcessedAction."""
+        super().__init__(option_strings, dest, **kwargs)
+        self._processing = processing
+
+    def __call__(self, parser: ArgumentParser, namespace: Namespace,
+                 values: Union[str, Sequence[Any], None],
+                 option_string: Optional[str] = None) -> None:
+        """Store the result of self._processing(values)."""
+        setattr(namespace, self.dest, self._processing(values))
+
 
 ARGUMENT_PARSER = argparse.ArgumentParser(add_help=False)
 ARGUMENT_PARSER.add_argument('-p', '--port', default='/dev/ttyACM0',
@@ -28,8 +45,9 @@ ARGUMENT_PARSER.add_argument('-p', '--port', default='/dev/ttyACM0',
                                   '(Default /dev/ttyACM0)')
 ARGUMENT_PARSER.add_argument('-b', '--baud-rate', default=9600, type=int,
                              help='The board\'s baud rate (Default 9600)')
-ARGUMENT_PARSER.add_argument('-d', '--move-delay', default=200, type=int,
-                             help='The delay before a move is recognized (Default 200)')
+ARGUMENT_PARSER.add_argument('-d', '--move-delay', action=StoreProcessedAction,
+                             processing=lambda x: x / 1000, default=0.2, type=float,
+                             help='The delay before a move is recognized, in ms (Default 200)')
 
 
 class Bitboard:

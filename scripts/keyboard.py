@@ -44,7 +44,7 @@ async def _main(args: argparse.Namespace):
     with usb_board.connection():
         while True:
             usb_board.tick()
-            await sleep(args.move_delay / 5000)  # helps reducing CPU load
+            await sleep(args.move_delay / 5)  # helps reducing CPU load
 
 
 if __name__ == '__main__':

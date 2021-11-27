@@ -49,7 +49,7 @@ async def _main(args: argparse.Namespace):
     with board.connection():
         async with APIConnection(args.token, passer.pass_to_recognizer) as connection:
             passer.recognizer, passer.connection = recognizer, connection
-            await gather(_tick(board, delay=args.move_delay / 5000), connection.loop())
+            await gather(_tick(board, delay=args.move_delay / 5), connection.loop())
 
 
 if __name__ == '__main__':
