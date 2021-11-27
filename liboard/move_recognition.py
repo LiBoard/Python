@@ -119,7 +119,7 @@ class MoveRecognizer:
     async def _check_for_move(self, disappearances: set[int], appearances: set[int],
                               tmp_lifted: set[int]):
         """Wait for _move_delay and then check if there's a matching move."""
-        await sleep(self._move_delay)
+        await sleep(self._move_delay/1000)
         if move := self._find_matching_move(disappearances, appearances, tmp_lifted):
             self._make_move(move)
 
