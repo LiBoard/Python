@@ -18,7 +18,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
-from time import sleep
+from asyncio import run, sleep
 
 import pyautogui
 from chess import BLACK, WHITE
@@ -28,7 +28,7 @@ from liboard.move_recognition import MoveRecognizer
 from liboard.physical import USBBoard
 
 
-def _main(args: argparse.Namespace):
+async def _main(args: argparse.Namespace):
     def _callback(board):
         if not board.ply():
             print('New game.')
@@ -44,7 +44,7 @@ def _main(args: argparse.Namespace):
     with usb_board.connection():
         while True:
             usb_board.tick()
-            sleep(args.move_delay / 5000)  # helps reducing CPU load
+            await sleep(args.move_delay / 5000)  # helps reducing CPU load
 
 
 if __name__ == '__main__':
@@ -52,6 +52,6 @@ if __name__ == '__main__':
     parser.add_argument('-B', '--black', action='store_const', dest='turn', default=WHITE,
                         const=BLACK, help='Play as black')
     try:
-        _main(parser.parse_args())
+        run(_main(parser.parse_args()))
     except KeyboardInterrupt:
         pass

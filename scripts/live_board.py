@@ -20,7 +20,8 @@
 import argparse
 import curses
 import datetime
-from time import sleep
+from asyncio import run, sleep
+from traceback import print_exc
 
 import chess.pgn
 from chess import Board
@@ -35,7 +36,10 @@ global game, node
 def _main(stdscreen: curses.window, _args: argparse.Namespace):
     curses.curs_set(False)
     curses.use_default_colors()
+    run(_live_board(stdscreen, _args))
 
+
+async def _live_board(stdscreen: curses.window, _args: argparse.Namespace):
     global game, node
     game = chess.pgn.Game()
     game.headers['Date'] = datetime.datetime.now().strftime('%Y.%m.%d')
@@ -70,7 +74,7 @@ def _main(stdscreen: curses.window, _args: argparse.Namespace):
     with usb_board.connection():
         while True:
             usb_board.tick()
-            sleep(_args.move_delay / 5000)  # helps reducing CPU load
+            await sleep(_args.move_delay / 5000)  # helps reducing CPU load
 
 
 if __name__ == '__main__':
@@ -82,6 +86,8 @@ if __name__ == '__main__':
         curses.wrapper(_main, args)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        print_exc(e)
     finally:
         print(game)
         if args.output_file:
