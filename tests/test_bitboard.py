@@ -13,11 +13,13 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from collections.abc import Iterable
+from typing import Any
+
 import chess
 import pytest
-from typing import Any
 from bitstring import Bits
-from collections.abc import Iterable
+
 from liboard import Bitboard
 
 
@@ -48,6 +50,9 @@ def test_constructor_invalid():
     (Bitboard(Bits(hex='FFFF00000000FFFF')), Bits(hex='FFFF00000000FFFF'), True),
     (Bitboard(Bits(hex='FFFF00000000FFFF')), chess.Board(), True),
     (Bitboard(Bits(hex='FFFF00000000FFFF')), {i for i in range(64) if i < 16 or i >= 48}, True),
+    (Bitboard(Bits(hex='FFFF00000000FFFF')),
+     frozenset({i for i in range(64) if i < 16 or i >= 48}),
+     True),
     (Bitboard(Bits(hex='FFFF00000000FFFF')), Bitboard(chess.Board()), True),
     (Bitboard(Bits(hex='FFFF00000000FFFF')), Bits(hex='FFFF00001000FFEF'), False),
     (Bitboard(Bits(hex='FFFF00000000FFFF')),
