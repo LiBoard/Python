@@ -14,14 +14,27 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """LiBoard submodule for communication with physical boards."""
-
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
+from asyncio import Protocol, Queue, StreamReader, StreamReaderProtocol, get_event_loop
+from asyncio.transports import BaseTransport
 from typing import Any, Callable, Optional, Union
 
-from serial import Serial
+from bitstring import BitStream
+from serial_asyncio import create_serial_connection
 
-from liboard import Bitboard
+from liboard import Bitboard, Bits
+
+
+class _BitboardProtocol(Protocol):
+    def __init__(self):
+        self.queue = Queue()
+        self.bits = BitStream()
+        self.transport: Optional[BaseTransport] = None
+
+    def data_received(self, data: bytes):
+        self.bits.append(Bits(bytes))
+        if len(self.bits) >= 64:
+            self.queue.put_nowait(self.bits.read('bits:64'))
 
 
 class PhysicalBoard(ABC):
@@ -44,22 +57,9 @@ class PhysicalBoard(ABC):
         """Whether the board can be communicated with in order to change its settings."""
         return self._configurable
 
-    @property
     @abstractmethod
-    def is_connected(self):
-        """Whether there's currently a connection to the board."""
-        return False
-
-    @abstractmethod
-    @contextmanager
-    def connection(self):
-        """Connect to the board."""
-        pass
-
-    @abstractmethod
-    def tick(self):
-        """Check for new data and call the callback if necessary."""
-        pass
+    async def bitboards(self):
+        """Yield incoming Bitboards asynchronously."""
 
 
 class USBBoard(PhysicalBoard):
@@ -76,24 +76,12 @@ class USBBoard(PhysicalBoard):
         super().__init__(callback, configurable)
         self._port: str = port
         self._baud_rate: int = baud_rate
-        self._connection: Optional[Serial] = None
 
-    @property
-    def is_connected(self):
-        """Whether there's currently a connection to the board."""
-        return self._connection and self._connection.is_open
-
-    @contextmanager
-    def connection(self):
-        """Connect to the board."""
-        try:
-            self._connection = Serial(self._port, self._baud_rate)
-            yield self._connection
-        finally:
-            self._connection.close()
-            self._connection = None
-
-    def tick(self):
-        """Check for new data and call the callback if necessary."""
-        if self.is_connected and self._connection.in_waiting >= 8:
-            self._callback(Bitboard(self._connection.read(8)))
+    async def bitboards(self):
+        """Yield incoming Bitboards asynchronously."""
+        loop = get_event_loop()
+        reader = StreamReader(loop=loop)
+        await create_serial_connection(loop, lambda: StreamReaderProtocol(reader, loop=loop),
+                                       self._port, baudrate=self._baud_rate)
+        while True:
+            yield Bitboard(await reader.readexactly(8))

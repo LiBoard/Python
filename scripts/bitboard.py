@@ -18,7 +18,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
-from asyncio import run, sleep
+from asyncio import run
 
 from liboard import Bitboard
 from liboard.physical import USBBoard
@@ -30,11 +30,8 @@ def _callback(bitboard: Bitboard):
 
 async def _main(args):
     board = USBBoard(_callback, args.port, args.baud_rate)
-
-    with board.connection():
-        while True:
-            board.tick()
-            await sleep(10 ** -2)
+    async for bb in board.bitboards():
+        print(bb)
 
 
 if __name__ == '__main__':

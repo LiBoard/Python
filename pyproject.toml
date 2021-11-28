@@ -12,6 +12,7 @@ pyserial = "^3.5"
 bitstring = "^3.1.9"
 PyAutoGUI = "^0.9.53"
 httpx = "^0.21.1"
+pyserial-asyncio = "^0.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
