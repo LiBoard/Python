@@ -18,7 +18,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
-from asyncio import run, sleep
+from asyncio import Queue, gather, run
 
 import pyautogui
 from chess import BLACK, WHITE
@@ -28,23 +28,27 @@ from liboard.move_recognition import MoveRecognizer
 from liboard.physical import USBBoard
 
 
-async def _main(args: argparse.Namespace):
-    def _callback(board):
+async def _watch_recognized_moves(recognized_move_q, turn):
+    while True:
+        board = await recognized_move_q.get()
         if not board.ply():
             print('New game.')
         else:
             move = board.move_stack[-1]
             print(move)
-            if board.turn != args.turn:
+            if board.turn != turn:
                 pyautogui.write(str(move))
 
-    recognizer = MoveRecognizer(_callback, args.move_delay)
-    usb_board = USBBoard(recognizer.on_event, args.port, args.baud_rate)
 
-    with usb_board.connection():
-        while True:
-            usb_board.tick()
-            await sleep(args.move_delay / 5)  # helps reducing CPU load
+async def _main(args: argparse.Namespace):
+    bitboard_q, recognized_move_q = Queue(), Queue()
+    board = USBBoard(bitboard_q, port=args.port, baud_rate=args.baud_rate)
+    recognizer = MoveRecognizer(bitboard_q, recognized_move_q, move_delay=args.move_delay)
+    await gather(
+        board.watch_incoming(),
+        recognizer.watch_bitboards(),
+        _watch_recognized_moves(recognized_move_q, args.turn)
+    )
 
 
 if __name__ == '__main__':

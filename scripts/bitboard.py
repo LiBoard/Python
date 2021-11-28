@@ -18,7 +18,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
-from asyncio import run
+from asyncio import Queue, run, create_task
 
 from liboard import Bitboard
 from liboard.physical import USBBoard
@@ -29,9 +29,11 @@ def _callback(bitboard: Bitboard):
 
 
 async def _main(args):
-    board = USBBoard(_callback, args.port, args.baud_rate)
-    async for bb in board.bitboards():
-        print(bb)
+    q = Queue()
+    board = USBBoard(q, args.port, args.baud_rate)
+    create_task(board.watch_incoming())
+    while True:
+        print(await q.get())
 
 
 if __name__ == '__main__':

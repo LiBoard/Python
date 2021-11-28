@@ -19,10 +19,10 @@
 
 import argparse
 import logging
-from asyncio import gather, run, sleep
+from asyncio import Queue, gather, run
 
 from liboard import ARGUMENT_PARSER
-from liboard.lichess import APIConnection, EventPasser
+from liboard.lichess import APIConnection
 from liboard.move_recognition import BoardAPIMoveRecognizer
 from liboard.physical import USBBoard
 
@@ -34,22 +34,22 @@ def _init_logging(args):
         logging.basicConfig(level=logging.DEBUG)
 
 
-async def _tick(*args, delay=0):
-    while True:
-        for a in args:
-            a.tick()
-        await sleep(delay)
-
-
 async def _main(args: argparse.Namespace):
     _init_logging(args)
-    passer = EventPasser()
-    recognizer = BoardAPIMoveRecognizer(passer.pass_to_api, move_delay=args.move_delay)
-    board = USBBoard(recognizer.on_event, port=args.port, baud_rate=args.baud_rate)
-    with board.connection():
-        async with APIConnection(args.token, passer.pass_to_recognizer) as connection:
-            passer.recognizer, passer.connection = recognizer, connection
-            await gather(_tick(board, delay=args.move_delay / 5), connection.loop())
+    bitboard_q, recognized_move_q, streamed_move_q = Queue(), Queue(), Queue()
+    board = USBBoard(bitboard_q, port=args.port, baud_rate=args.baud_rate)
+    recognizer = BoardAPIMoveRecognizer(bitboard_q, recognized_move_q, streamed_move_q,
+                                        move_delay=args.move_delay)
+    api_connection = APIConnection(args.token, recognized_move_q, streamed_move_q)
+    async with api_connection:
+        await gather(
+            board.watch_incoming(),
+            recognizer.watch_bitboards(),
+            recognizer.watch_streamed_moves(),
+            recognizer.watch_bitboards(),
+            api_connection.watch_events(),
+            api_connection.watch_recognized_moves()
+        )
 
 
 if __name__ == '__main__':

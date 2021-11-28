@@ -20,36 +20,23 @@
 import argparse
 import curses
 import datetime
-from asyncio import run, sleep
+from asyncio import Queue, gather, run
 from traceback import print_exc
 
-import chess.pgn
-from chess import Board
+from chess.pgn import Game
 
 from liboard import ARGUMENT_PARSER
 from liboard.move_recognition import MoveRecognizer
 from liboard.physical import USBBoard
 
-global game, node
 
-
-def _main(stdscreen: curses.window, _args: argparse.Namespace):
-    curses.curs_set(False)
-    curses.use_default_colors()
-    run(_live_board(stdscreen, _args))
-
-
-async def _live_board(stdscreen: curses.window, _args: argparse.Namespace):
-    global game, node
-    game = chess.pgn.Game()
-    game.headers['Date'] = datetime.datetime.now().strftime('%Y.%m.%d')
-    node = game
-
-    def _callback(board: Board):
-        global game, node
+async def _watch_recognized_moves(recognized_move_q: Queue, _game: Game, stdscreen: curses.window):
+    node = _game
+    while True:
+        board = await recognized_move_q.get()
         stdscreen.clear()
         if not board.ply():
-            node = game
+            node = _game
             stdscreen.addstr('New game.\n')
         else:
             move = board.move_stack[-1]
@@ -62,19 +49,28 @@ async def _live_board(stdscreen: curses.window, _args: argparse.Namespace):
                 '{num}. {ellipsis}{san}\n'.format(num=int((node.ply() + 1) / 2),
                                                   ellipsis=('' if node.ply() % 2 else '...'),
                                                   san=node.san()))
-        stdscreen.addstr(str(board))
-        stdscreen.refresh()
+            stdscreen.addstr(str(board))
+            stdscreen.refresh()
 
-    recognizer = MoveRecognizer(_callback, _args.move_delay)
-    usb_board = USBBoard(recognizer.on_event, _args.port, _args.baud_rate)
 
+async def _coro(stdscreen: curses.window, _game: Game, _args: argparse.Namespace):
+    curses.curs_set(False)
+    curses.use_default_colors()
     stdscreen.clear()
     stdscreen.addstr('Ready to start.')
     stdscreen.refresh()
-    with usb_board.connection():
-        while True:
-            usb_board.tick()
-            await sleep(_args.move_delay / 5)  # helps reducing CPU load
+    bitboard_q, move_q = Queue(), Queue()
+    board = USBBoard(bitboard_q, port=args.port, baud_rate=args.baud_rate)
+    recognizer = MoveRecognizer(bitboard_q, move_q, move_delay=args.move_delay)
+    await gather(
+        board.watch_incoming(),
+        recognizer.watch_bitboards(),
+        _watch_recognized_moves(move_q, game, stdscreen)
+    )
+
+
+def _main(stdscreen: curses.window, _game: Game, _args: argparse.Namespace):
+    run(_coro(stdscreen, _game, _args))
 
 
 if __name__ == '__main__':
@@ -82,8 +78,10 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output-file', default='',
                         help='Optional file to write the pgn to')
     args = parser.parse_args()
+    game = Game()
+    game.headers['Date'] = datetime.datetime.now().strftime('%Y.%m.%d')
     try:
-        curses.wrapper(_main, args)
+        curses.wrapper(_main, game, args)
     except KeyboardInterrupt:
         pass
     except Exception as e:
