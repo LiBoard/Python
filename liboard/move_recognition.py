@@ -16,10 +16,10 @@
 """LiBoard submodule for recognizing moves."""
 
 import logging
-from asyncio import Task, create_task, sleep
+from asyncio import Queue, Task, create_task, sleep
 from enum import Enum, auto
 from time import perf_counter_ns
-from typing import Callable, Optional, Union
+from typing import Optional
 
 from chess import Board, Move
 
@@ -29,15 +29,17 @@ from liboard import Bitboard
 class MoveRecognizer:
     """Handles move recognition."""
 
-    def __init__(self, callback: Callable, move_delay: float = 0.2):
+    def __init__(self, bitboard_q: Queue, recognized_move_q: Queue, move_delay: float = 0.2):
         """
         Initialize a new MoveRecognizer.
 
-        :param callback: a callback for new games and moves
+        :param bitboard_q: Queue to get bitboards from the PhysicalBoard from.
+        :param recognized_move_q: Queue to put recognized moves in.
         :param move_delay: delay before recognizing a move in ms
         """
         # general properties
-        self._callback: Callable = callback
+        self._bitboard_q: Queue = bitboard_q
+        self._recognized_move_q: Queue = recognized_move_q
         self._move_delay: float = move_delay
 
         # used for move recognition
@@ -46,12 +48,10 @@ class MoveRecognizer:
         self._lifted: set = set()
         self._task: Optional[Task] = None
 
-    def on_event(self, event: Union[str, Bitboard]):
-        """Handle incoming events."""
-        if isinstance(event, str):
-            pass
-        elif isinstance(event, Bitboard):
-            self._on_new_bitboard(event)
+    async def watch_bitboards(self):
+        """Watch for incoming bitboards."""
+        while True:
+            self._on_new_bitboard(await self._bitboard_q.get())
 
     def _on_new_bitboard(self, bitboard: Bitboard):
         """Handle a received bitboard."""
@@ -66,7 +66,7 @@ class MoveRecognizer:
         """Do what's necessary when a new game is started."""
         self._vboard.reset()
         self._lifted.clear()
-        self._callback(self._vboard.copy())
+        self._recognized_move_q.put_nowait(self._vboard.copy())
 
     def _candidate_move(self, move_type: str, from_set: set[int], to_set: set[int]):
         """
@@ -114,7 +114,7 @@ class MoveRecognizer:
         """Push a move, clear _lifted and call _callback."""
         self._lifted.clear()
         self._vboard.push(move)
-        self._callback(self._vboard)
+        self._recognized_move_q.put_nowait(self._vboard.copy())
 
     async def _check_for_move(self, disappearances: set[int], appearances: set[int],
                               tmp_lifted: set[int]):
@@ -147,14 +147,18 @@ class MoveRecognizer:
 class BoardAPIMoveRecognizer(MoveRecognizer):
     """Handles move recognition when using the Board API."""
 
-    def __init__(self, callback: Callable, move_delay: float = 0.2):
+    def __init__(self, bitboard_q: Queue, recognized_move_q: Queue, streamed_move_q: Queue,
+                 move_delay: float = 0.2):
         """
         Initialize a new BoardApiMoveRecognizer.
 
-        :param callback: a callback for new games and moves
+        :param bitboard_q: Queue to get bitboards from the PhysicalBoard from.
+        :param recognized_move_q: Queue to put recognized moves in.
+        :param streamed_move_q: Queue to get streamed moves from.
         :param move_delay: delay before recognizing a move in ms
         """
-        super().__init__(callback, move_delay)
+        super().__init__(bitboard_q, recognized_move_q, move_delay)
+        self._streamed_move_q: Queue = streamed_move_q
         self._phase: Phase = Phase.CATCH_UP
 
     @property
@@ -167,10 +171,14 @@ class BoardAPIMoveRecognizer(MoveRecognizer):
         self._phase = phase
         logging.info(f'Phase {phase}')
 
-    def handle_streamed_moves(self, moves: str):
+    async def watch_streamed_moves(self):
+        """Watch for streamed moves."""
+        while True:
+            self._handle_streamed_moves(await self._streamed_move_q.get())
+
+    def _handle_streamed_moves(self, moves: str):
         """Handle moves streamed from the board API."""
         logging.debug(f'Streamed moves: {moves}')
-
         self._vboard.reset()
         self._lifted.clear()
         for uci in moves.split():

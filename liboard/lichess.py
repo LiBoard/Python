@@ -16,30 +16,28 @@
 """LiBoard submodule for interacting with the Lichess Board API."""
 import json
 import logging
-from asyncio import Task, create_task, gather, sleep
-from typing import Any, Callable, Optional
+from asyncio import Queue, Task, create_task
+from typing import Optional
 
-from chess import Board
 from httpx import AsyncClient
-
-from liboard.move_recognition import BoardAPIMoveRecognizer
 
 
 class APIConnection:
     """A connection to the API."""
 
-    def __init__(self, token: str, callback: Callable[[str], Any]):
+    def __init__(self, token: str, recognized_move_q: Queue, streamed_move_q: Queue):
         """
         Initialize a new APIConnection.
 
         :param token: Personal API access token
-        :param callback: callback for streamed moves
+        :param streamed_move_q: Queue to put streamed moves in
+        :param recognized_move_q: Queue to get recognized moves from
         """
         self._headers = {'Authorization': f'Bearer {token}'}
         self._client: Optional[AsyncClient] = None
-        self._callback = callback
+        self.streamed_move_queue = streamed_move_q
+        self._recognized_move_queue = recognized_move_q
         self._game: Optional[Game] = None
-        self._tasks: list[Task] = []
 
     # region context manager
     async def __aenter__(self):
@@ -58,22 +56,11 @@ class APIConnection:
 
     # endregion
 
-    async def loop(self):
-        """Start watching API events."""
-        await gather(create_task(self._watch_events()), create_task(self._await_tasks()))
-
-    def recognizer_callback(self, board: Board):
-        """Handle moves recognized by a MoveRecognizer."""
-        if board.ply():
-            self._tasks.append(create_task(self._send_move(str(board.move_stack[-1]))))
-
-    def handle_streamed_moves(self, moves: str):
-        """
-        Handle streamed moves.
-
-        :param moves: A string of UCI moves to handle.
-        """
-        self._callback(moves)
+    async def watch_recognized_moves(self):
+        """Watch for recognized moves."""
+        while True:
+            if (board := await self._recognized_move_queue.get()).ply():
+                create_task(self._send_move(str(board.move_stack[-1])))
 
     async def stream(self, url):
         """Yield json objects from a stream."""
@@ -83,7 +70,7 @@ class APIConnection:
                     logging.debug(line)
                     yield json.loads(line)
 
-    async def _watch_events(self):
+    async def watch_events(self):
         """Watch the event stream."""
         self._ensure_open()
         async for event in self.stream('https://lichess.org/api/stream/event'):
@@ -106,13 +93,6 @@ class APIConnection:
                     if self._game and game_id == self._game.game_id:
                         self._game.__exit__()
                         self._game = None
-
-    async def _await_tasks(self):
-        """Await all pending tasks periodically."""
-        while True:
-            if self._tasks:
-                await self._tasks.pop()
-            await sleep(0.5)
 
     async def _send_move(self, move: str):
         logging.info(f'Move: {move}')
@@ -174,21 +154,4 @@ class Game:
                 if state['status'] != 'started':
                     logging.info(f"Status: {state['status']}")
                     return
-                self._connection.handle_streamed_moves(state['moves'])
-
-
-class EventPasser:
-    """Passes along events between an APIConnection and a BoardAPIMoveRecognizer."""
-
-    def __init__(self):
-        """Initialize a new EventPasser."""
-        self.recognizer: Optional[BoardAPIMoveRecognizer] = None
-        self.connection: Optional[APIConnection] = None
-
-    def pass_to_api(self, *args):
-        """Call the APIConnection's recognizer_callback with *args."""
-        self.connection.recognizer_callback(*args)
-
-    def pass_to_recognizer(self, *args):
-        """Call the BoardAPIMoveRecognizer's handle_streamed_moves with *args."""
-        self.recognizer.handle_streamed_moves(*args)
+                self._connection.streamed_move_queue.put_nowait(state['moves'])
