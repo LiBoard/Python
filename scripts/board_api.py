@@ -19,7 +19,9 @@
 
 import argparse
 import logging
+import os
 from asyncio import Queue, gather, run
+from configparser import ConfigParser
 
 from liboard import ARGUMENT_PARSER
 from liboard.lichess import APIConnection
@@ -34,13 +36,22 @@ def _init_logging(args):
         logging.basicConfig(level=logging.DEBUG)
 
 
+def _get_token(args):
+    config = ConfigParser()
+    config.read(args.config_file)
+    token = config['Board API']['token']
+    logging.debug(f'API token: {token}')
+    return token
+
+
 async def _main(args: argparse.Namespace):
     _init_logging(args)
+    token = _get_token(args)
     bitboard_q, recognized_move_q, streamed_move_q = Queue(), Queue(), Queue()
     board = USBBoard(bitboard_q, port=args.port, baud_rate=args.baud_rate)
     recognizer = BoardAPIMoveRecognizer(bitboard_q, recognized_move_q, streamed_move_q,
                                         move_delay=args.move_delay)
-    api_connection = APIConnection(args.token, recognized_move_q, streamed_move_q)
+    api_connection = APIConnection(token, recognized_move_q, streamed_move_q)
     async with api_connection:
         await gather(
             board.watch_incoming(),
@@ -54,8 +65,10 @@ async def _main(args: argparse.Namespace):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, parents=[ARGUMENT_PARSER])
-    parser.add_argument('-t', '--token', type=str, help='Personal Access Token')
     parser.add_argument('-D', '--debug', type=str, default='info', help='Debug mode')
+    parser.add_argument('-c', '--config-file', type=str,
+                        default=f'{os.path.dirname(os.path.realpath(__file__))}/scripts.ini',
+                        help='File to read config from (Default scripts.ini)')
     try:
         run(_main(parser.parse_args()))
     except KeyboardInterrupt:
